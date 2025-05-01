@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2048 Game - Modern+</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <style>
+        /* Custom styles for the game */
+        body {
+            font-family: 'Poppins', sans-serif;
+            touch-action: none;
+            overscroll-behavior: contain;
+            background-color: #faf8ef;
+        }
+
+        /* Base styles for the game grid cells */
+        .grid-cell {
+            width: calc(25% - 12px);
+            padding-bottom: calc(25% - 12px);
+            background-color: rgba(238, 228, 218, 0.35);
+            border-radius: 8px; /* Increased roundness */
+        }
+
+        /* Base styles for tiles */
+        .tile {
+            position: absolute;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            font-size: 1.8em;
+            border-radius: 8px; /* Increased roundness */
+            box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1); /* Slightly enhanced shadow */
+            transition: transform 0.1s ease-in-out, background-color 0.1s ease-in-out, color 0.1s ease-in-out, top 0.1s ease-in-out, left 0.1s ease-in-out, box-shadow 0.1s ease-in-out;
+            z-index: 10;
+            width: calc(25% - 12px);
+            height: calc(25% - 12px);
+        }
+
+        /* Tile colors using CSS variables - Refreshed Palette */
+        :root {
+            --tile-2: #eee4da; --text-2: #776e65;
+            --tile-4: #ede0c8; --text-4: #776e65;
+            --tile-8: #f2b179; --text-8: #f9f6f2;
+            --tile-16: #f59563; --text-16: #f9f6f2;
+            --tile-32: #f67c5f; --text-32: #f9f6f2;
+            --tile-64: #f65e3b; --text-64: #f9f6f2;
+            --tile-128: #edcf72; --text-128: #f9f6f2;
+            --tile-256: #edcc61; --text-256: #f9f6f2;
+            --tile-512: #edc850; --text-512: #f9f6f2;
+            --tile-1024: #edc53f; --text-1024: #f9f6f2;
+            --tile-2048: #edc22e; --text-2048: #f9f6f2;
+            --tile-super: #3c3a32; --text-super: #f9f6f2;
+            --game-bg: #bbada0;
+            --ui-bg: #eee;
+            --text-dark: #776e65;
+            --text-light: #f9f6f2;
+            --accent: #8f7a66;
+            --accent-hover: #9f8b77;
+            --wood-border: #a08064; /* Wooden frame color */
+        }
+
+        /* Font size adjustments based on number length */
+        .tile[data-value-length="1"] { font-size: 1.8em; }
+        .tile[data-value-length="2"] { font-size: 1.8em; }
+        .tile[data-value-length="3"] { font-size: 1.6em; }
+        .tile[data-value-length="4"] { font-size: 1.4em; }
+        .tile[data-value-length="5"] { font-size: 1.2em; }
+
+        /* Animation for new tile appearance */
+        .tile-new {
+            animation: appear 0.2s ease-out;
+        }
+        @keyframes appear {
+            0% { transform: scale(0.5); opacity: 0.5; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        /* Animation for merged tile */
+        .tile-merged {
+            animation: pop 0.2s ease-out;
+            z-index: 20;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2); /* Enhanced shadow on merge */
+        }
+        @keyframes pop {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+
+        /* Game Over Overlay */
+        .game-over-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(250, 248, 239, 0.85);
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            z-index: 100;
+            border-radius: 10px; /* Match container roundness */
+            opacity: 0; visibility: hidden;
+            transition: opacity 0.4s ease-in-out, visibility 0.4s ease-in-out;
+        }
+        .game-over-overlay.active { opacity: 1; visibility: visible; }
+
+        /* Custom button style */
+        .btn-primary {
+            background-color: var(--accent); color: var(--text-light);
+            padding: 0.7rem 1.4rem; /* Slightly larger padding */
+            border-radius: 8px; /* Increased roundness */
+            font-weight: 600;
+            transition: background-color 0.2s ease, transform 0.1s ease, box-shadow 0.1s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+            border: none; cursor: pointer;
+        }
+        .btn-primary:hover {
+            background-color: var(--accent-hover);
+            transform: translateY(-2px); /* More lift */
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        .btn-primary:active {
+            transform: translateY(0px);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+
+        /* Score and Timer Box Style */
+        .info-box {
+            background-color: var(--game-bg); color: var(--text-light);
+            padding: 0.6rem 1.2rem;
+            border-radius: 8px; /* Increased roundness */
+            font-size: 1.1rem;
+            min-width: 110px; /* Slightly wider */
+            text-align: center;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.15); /* Deeper inner shadow */
+        }
+        .info-box span {
+            font-weight: 700; display: block; margin-top: 3px; font-size: 1.4rem;
+        }
+
+        /* Timer toggle button style */
+        .timer-toggle {
+            background: none; border: none; color: var(--accent);
+            font-size: 0.9rem; cursor: pointer; margin-left: 10px; font-weight: 600;
+        }
+         .timer-toggle:hover { color: var(--accent-hover); text-decoration: underline; }
+
+         /* Game Container Styling */
+         #game-container {
+            border: 6px solid var(--wood-border); /* Wooden frame border */
+            border-radius: 10px; /* Rounded corners for the frame */
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1), /* Outer shadow */
+                        inset 0 0 10px rgba(0,0,0,0.1); /* Inner shadow for depth */
+            padding: 12px; /* Adjusted padding to be relative to border */
+            background-clip: padding-box; /* Ensure background doesn't go under border */
+         }
+
+    </style>
+</head>
+<body class="bg-gray-100 flex flex-col items-center justify-center min-h-screen p-4">
+
+    <div class="text-center mb-6 w-full max-w-md">
+        <h1 class="text-5xl font-bold text-[var(--text-dark)] mb-4">2048</h1>
+        <div class="flex justify-between items-center mb-4">
+            <div class="info-box">
+                Score <span id="score">0</span>
+            </div>
+            <div id="timer-box" class="info-box hidden">
+                 Time <span id="timer">00:00</span>
+            </div>
+            <div class="flex flex-col items-end">
+                 <button id="restart-button" class="btn-primary mb-2">New Game</button>
+                 <button id="timer-toggle-button" class="timer-toggle">[Show Timer]</button>
+            </div>
+        </div>
+         <p class="text-sm text-[var(--text-dark)] opacity-80">Use arrow keys or swipe to move tiles.</p>
+    </div>
+
+    <div id="game-container" class="relative w-full max-w-md aspect-square bg-[var(--game-bg)] rounded-md shadow-xl"> <div class="grid grid-cols-4 gap-3"> <div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div>
+            <div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div>
+            <div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div>
+            <div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div><div class="grid-cell"></div>
+        </div>
+        <div id="tile-container" class="absolute top-0 left-0 right-0 bottom-0 p-3"> </div>
+        <div id="game-over-overlay" class="game-over-overlay">
+            <p class="text-5xl font-bold text-[var(--text-dark)] mb-6">Game Over!</p>
+            <button id="restart-button-overlay" class="btn-primary">Try Again</button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- DOM Elements ---
+            const gridContainer = document.getElementById('game-container');
+            const tileContainer = document.getElementById('tile-container');
+            const scoreElement = document.getElementById('score');
+            const restartButton = document.getElementById('restart-button');
+            const restartButtonOverlay = document.getElementById('restart-button-overlay');
+            const gameOverOverlay = document.getElementById('game-over-overlay');
+            const timerBox = document.getElementById('timer-box');
+            const timerElement = document.getElementById('timer');
+            const timerToggleButton = document.getElementById('timer-toggle-button');
+
+            // --- Game State ---
+            const gridSize = 4;
+            let grid = [];
+            let score = 0;
+            let isMoving = false;
+            let gameWon = false;
+
+            // --- Timer State ---
+            let timerInterval = null;
+            let startTime = 0;
+            let elapsedTime = 0;
+            let isTimerRunning = false;
+            let isTimerVisible = false;
+
+            // --- Sound Effects (Tone.js) ---
+            let soundInitialized = false;
+            // Simple move sound
+            const moveSound = new Tone.Synth({
+                oscillator: { type: 'sine' }, volume: -18, // Quieter move sound
+                envelope: { attack: 0.005, decay: 0.1, sustain: 0, release: 0.1 }
+            }).toDestination();
+            // Game over sound
+             const gameOverSound = new Tone.Synth({
+                oscillator: { type: 'sawtooth' }, volume: -6,
+                envelope: { attack: 0.1, decay: 0.5, sustain: 0, release: 0.5 }
+            }).toDestination();
+            // Merge sounds - using a PolySynth for potential chords later, but using single notes now
+            const mergeSynth = new Tone.PolySynth(Tone.Synth, {
+                 oscillator: { type: 'triangle' }, // Slightly richer sound
+                 envelope: { attack: 0.01, decay: 0.2, sustain: 0.1, release: 0.2 },
+                 volume: -10 // Base volume for merges
+            }).toDestination();
+            // Drum sound for 64 merge
+            const drumSound = new Tone.MembraneSynth({
+                 pitchDecay: 0.01, // Short decay for a 'kick' like sound
+                 octaves: 6, // Affects the tone
+                 oscillator: { type: 'sine' },
+                 envelope: { attack: 0.001, decay: 0.3, sustain: 0.01, release: 0.4 },
+                 volume: -5
+            }).toDestination();
+
+            // Map merged tile values to notes/sounds
+            const mergeSoundsMap = {
+                4: { note: 'C4', duration: '16n', synth: mergeSynth },
+                8: { note: 'E4', duration: '16n', synth: mergeSynth },
+                16: { note: 'G4', duration: '16n', synth: mergeSynth },
+                32: { note: 'A4', duration: '16n', synth: mergeSynth },
+                64: { note: 'C3', duration: '8n', synth: drumSound }, // Use drum synth
+                128: { note: 'C5', duration: '16n', synth: mergeSynth },
+                256: { note: 'E5', duration: '16n', synth: mergeSynth },
+                512: { note: 'G5', duration: '16n', synth: mergeSynth },
+                1024: { note: 'A5', duration: '16n', synth: mergeSynth },
+                2048: { note: 'C6', duration: '8n', synth: mergeSynth, volume: -6 }, // Higher pitch, slightly louder
+                // Add more for higher values if needed
+            };
+
+
+            async function initializeAudio() {
+                if (!soundInitialized && Tone.context.state !== 'running') {
+                    await Tone.start();
+                    console.log('Audio Context started');
+                    soundInitialized = true;
+                }
+            }
+
+            // --- Game Initialization ---
+            function setupGame() {
+                initializeAudio();
+                grid = Array(gridSize).fill(null).map(() => Array(gridSize).fill(0));
+                score = 0;
+                gameWon = false;
+                updateScore(0);
+                tileContainer.innerHTML = '';
+                gameOverOverlay.classList.remove('active');
+                isMoving = false;
+                resetTimer();
+                if (isTimerVisible) startTimer();
+                addRandomTile();
+                addRandomTile();
+                handleResize(); // Ensure tiles are positioned correctly initially
+                console.log("Game Setup Complete");
+            }
+
+            // --- Tile Management ---
+            function addRandomTile() {
+                const emptyCells = [];
+                for (let r = 0; r < gridSize; r++) for (let c = 0; c < gridSize; c++) if (grid[r][c] === 0) emptyCells.push({ r, c });
+                if (emptyCells.length > 0) {
+                    const { r, c } = emptyCells[Math.floor(Math.random() * emptyCells.length)];
+                    const value = Math.random() < 0.9 ? 2 : 4;
+                    grid[r][c] = value;
+                    createTileElement(r, c, value, true);
+                }
+            }
+
+            function createTileElement(r, c, value, isNew = false) {
+                const tile = document.createElement('div');
+                tile.classList.add('tile');
+                tile.dataset.value = value;
+                tile.dataset.row = r;
+                tile.dataset.col = c;
+                updateTileAppearance(tile, value);
+                updateTilePosition(tile, r, c); // Position calculation needs container dimensions
+                if (isNew) {
+                    tile.classList.add('tile-new');
+                    tile.addEventListener('animationend', () => tile.classList.remove('tile-new'), { once: true });
+                }
+                tileContainer.appendChild(tile);
+                return tile;
+            }
+
+            function updateTileAppearance(tileElement, value) {
+                 tileElement.textContent = value;
+                 const numDigits = String(value).length;
+                 tileElement.dataset.valueLength = numDigits;
+                 let bgColorVar, textColorVar;
+                 switch (value) {
+                    case 2:    bgColorVar = '--tile-2'; textColorVar = '--text-2'; break;
+                    case 4:    bgColorVar = '--tile-4'; textColorVar = '--text-4'; break;
+                    case 8:    bgColorVar = '--tile-8'; textColorVar = '--text-8'; break;
+                    case 16:   bgColorVar = '--tile-16'; textColorVar = '--text-16'; break;
+                    case 32:   bgColorVar = '--tile-32'; textColorVar = '--text-32'; break;
+                    case 64:   bgColorVar = '--tile-64'; textColorVar = '--text-64'; break;
+                    case 128:  bgColorVar = '--tile-128'; textColorVar = '--text-128'; break;
+                    case 256:  bgColorVar = '--tile-256'; textColorVar = '--text-256'; break;
+                    case 512:  bgColorVar = '--tile-512'; textColorVar = '--text-512'; break;
+                    case 1024: bgColorVar = '--tile-1024'; textColorVar = '--text-1024'; break;
+                    case 2048: bgColorVar = '--tile-2048'; textColorVar = '--text-2048'; break;
+                    default:   bgColorVar = '--tile-super'; textColorVar = '--text-super';
+                 }
+                 tileElement.style.backgroundColor = `var(${bgColorVar})`;
+                 tileElement.style.color = `var(${textColorVar})`;
+                 tileElement.dataset.value = value;
+            }
+
+            function updateTilePosition(tileElement, r, c) {
+                // Recalculate based on current container size, padding, and gap
+                const containerPadding = parseFloat(getComputedStyle(gridContainer).paddingLeft); // Get actual padding
+                const cellGap = parseFloat(getComputedStyle(tileContainer.parentElement.querySelector('.grid')).gap); // Get actual gap
+                const totalGridWidth = gridContainer.clientWidth - 2 * containerPadding;
+                // Ensure cellSize is calculated correctly, considering potential floating point issues
+                const cellSize = Math.floor((totalGridWidth - (gridSize - 1) * cellGap) / gridSize);
+
+                const topOffset = containerPadding + r * (cellSize + cellGap);
+                const leftOffset = containerPadding + c * (cellSize + cellGap);
+
+                tileElement.style.top = `${topOffset}px`;
+                tileElement.style.left = `${leftOffset}px`;
+                tileElement.style.width = `${cellSize}px`;
+                tileElement.style.height = `${cellSize}px`;
+                tileElement.dataset.row = r;
+                tileElement.dataset.col = c;
+            }
+
+            function handleResize() {
+                 const tiles = tileContainer.querySelectorAll('.tile');
+                 tiles.forEach(tile => {
+                     const r = parseInt(tile.dataset.row);
+                     const c = parseInt(tile.dataset.col);
+                     // Need a slight delay or ensure layout is stable before recalculating
+                     requestAnimationFrame(() => updateTilePosition(tile, r, c));
+                 });
+             }
+             window.addEventListener('resize', handleResize);
+
+
+            // --- Game Logic ---
+            function move(direction) {
+                if (isMoving) return;
+                initializeAudio();
+                isMoving = true;
+
+                let moved = false;
+                let mergeOccurred = false; // Track if any merge happened
+                let mergePromises = [];
+                let moveSoundPlayed = false;
+
+                const R = Array.from({ length: gridSize }, (_, i) => i);
+                const C = Array.from({ length: gridSize }, (_, i) => i);
+                if (direction === 'up') R.sort((a, b) => a - b);
+                if (direction === 'down') R.sort((a, b) => b - a);
+                if (direction === 'left') C.sort((a, b) => a - b);
+                if (direction === 'right') C.sort((a, b) => b - a);
+
+                const dr = direction === 'up' ? -1 : direction === 'down' ? 1 : 0;
+                const dc = direction === 'left' ? -1 : direction === 'right' ? 1 : 0;
+                let currentScoreIncrease = 0;
+                const mergedTilesThisTurn = new Set();
+
+                for (const r of R) {
+                    for (const c of C) {
+                        if (grid[r][c] === 0) continue;
+                        let currentR = r, currentC = c;
+                        let nextR = currentR + dr, nextC = currentC + dc;
+                        let targetR = r, targetC = c;
+                        let mergeTargetTile = null;
+
+                        while (nextR >= 0 && nextR < gridSize && nextC >= 0 && nextC < gridSize) {
+                            const nextCellValue = grid[nextR][nextC];
+                            const targetTileKey = `${nextR}-${nextC}`;
+                            if (nextCellValue === 0) {
+                                targetR = nextR; targetC = nextC;
+                            } else if (nextCellValue === grid[currentR][currentC] && !mergedTilesThisTurn.has(targetTileKey)) {
+                                targetR = nextR; targetC = nextC;
+                                mergeTargetTile = findTileElement(targetR, targetC);
+                                break;
+                            } else break;
+                            nextR += dr; nextC += dc;
+                        }
+
+                        if (targetR !== r || targetC !== c) {
+                            moved = true;
+                            const movingTile = findTileElement(r, c);
+                            if (!movingTile) { // Should not happen, but safety check
+                                 console.error(`Could not find tile at ${r}, ${c}`);
+                                 continue;
+                            }
+
+                            if (mergeTargetTile) {
+                                // --- Handle Merge ---
+                                mergeOccurred = true; // Mark that a merge happened this move
+                                const newValue = grid[r][c] * 2;
+                                grid[targetR][targetC] = newValue;
+                                grid[r][c] = 0;
+                                currentScoreIncrease += newValue;
+                                mergedTilesThisTurn.add(`${targetR}-${targetC}`);
+                                if (newValue === 2048) gameWon = true;
+
+                                const movePromise = new Promise(resolve => {
+                                    movingTile.addEventListener('transitionend', resolve, { once: true });
+                                    updateTilePosition(movingTile, targetR, targetC);
+                                });
+
+                                mergePromises.push(movePromise.then(() => {
+                                    return new Promise(resolve => {
+                                        movingTile.remove();
+                                        updateTileAppearance(mergeTargetTile, newValue);
+                                        mergeTargetTile.classList.add('tile-merged');
+
+                                        // Play specific merge sound
+                                        if (soundInitialized && mergeSoundsMap[newValue]) {
+                                            const sound = mergeSoundsMap[newValue];
+                                            const synth = sound.synth;
+                                            const volume = sound.volume !== undefined ? sound.volume : (synth === drumSound ? -5 : -10); // Use specific or default volume
+                                            synth.triggerAttackRelease(sound.note, sound.duration, Tone.now(), volume); // Pass volume here
+                                        } else if (soundInitialized) {
+                                             // Fallback for very high values not in map
+                                             mergeSynth.triggerAttackRelease('C7', '16n', Tone.now(), -12);
+                                        }
+
+                                        mergeTargetTile.addEventListener('animationend', () => {
+                                            mergeTargetTile.classList.remove('tile-merged');
+                                            resolve();
+                                        }, { once: true });
+                                    });
+                                }));
+
+                            } else {
+                                // --- Handle Simple Move ---
+                                grid[targetR][targetC] = grid[r][c];
+                                grid[r][c] = 0;
+                                const movePromise = new Promise(resolve => {
+                                     movingTile.addEventListener('transitionend', resolve, { once: true });
+                                     updateTilePosition(movingTile, targetR, targetC);
+                                });
+                                // Don't add simple moves to mergePromises unless necessary
+                            }
+                        }
+                    }
+                }
+
+                // After all tiles processed
+                 // Play move sound only if tiles moved but no merge occurred
+                 if (moved && !mergeOccurred && !moveSoundPlayed && soundInitialized) {
+                     moveSound.triggerAttackRelease("A2", "32n", Tone.now()); // Very short, low sound for slide
+                     moveSoundPlayed = true;
+                 }
+
+                Promise.all(mergePromises).then(() => {
+                    if (moved) {
+                        updateScore(currentScoreIncrease);
+                        addRandomTile();
+                        if (!canMove()) gameOver();
+                        else if (gameWon) console.log("You reached 2048!");
+                    }
+                    setTimeout(() => { isMoving = false; }, 50); // Release lock after animations settle
+                });
+                 if (!moved) isMoving = false; // Release immediately if nothing moved
+            }
+
+
+            function findTileElement(r, c) {
+                return tileContainer.querySelector(`.tile[data-row="${r}"][data-col="${c}"]`);
+            }
+
+            function updateScore(amount) {
+                score += amount;
+                scoreElement.textContent = score;
+            }
+
+            // --- Game Over Logic ---
+            function canMove() {
+                for (let r = 0; r < gridSize; r++) for (let c = 0; c < gridSize; c++) if (grid[r][c] === 0) return true;
+                for (let r = 0; r < gridSize; r++) for (let c = 0; c < gridSize; c++) {
+                    const val = grid[r][c];
+                    if (c < gridSize - 1 && grid[r][c + 1] === val) return true;
+                    if (r < gridSize - 1 && grid[r + 1][c] === val) return true;
+                }
+                return false;
+            }
+
+            function gameOver() {
+                console.log("Game Over!");
+                if (soundInitialized) gameOverSound.triggerAttackRelease("A2", "2n", Tone.now());
+                gameOverOverlay.classList.add('active');
+                stopTimer();
+                isMoving = true;
+            }
+
+             // --- Timer Logic ---
+            function formatTime(seconds) {
+                const mins = Math.floor(seconds / 60); const secs = seconds % 60;
+                return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+            }
+            function updateTimerDisplay() {
+                const now = Date.now();
+                const currentElapsed = elapsedTime + (isTimerRunning ? (now - startTime) / 1000 : 0);
+                timerElement.textContent = formatTime(Math.floor(currentElapsed));
+            }
+            function startTimer() {
+                if (!isTimerRunning) {
+                    startTime = Date.now();
+                    timerInterval = setInterval(updateTimerDisplay, 1000);
+                    isTimerRunning = true;
+                }
+            }
+            function stopTimer() {
+                if (isTimerRunning) {
+                    clearInterval(timerInterval);
+                    elapsedTime += (Date.now() - startTime) / 1000;
+                    isTimerRunning = false;
+                    updateTimerDisplay();
+                }
+            }
+            function resetTimer() {
+                stopTimer(); elapsedTime = 0; startTime = 0;
+                timerElement.textContent = formatTime(0);
+            }
+            function toggleTimerVisibility() {
+                isTimerVisible = !isTimerVisible;
+                if (isTimerVisible) {
+                    timerBox.classList.remove('hidden');
+                    timerToggleButton.textContent = '[Hide Timer]';
+                    startTimer();
+                } else {
+                    timerBox.classList.add('hidden');
+                    timerToggleButton.textContent = '[Show Timer]';
+                    stopTimer();
+                }
+            }
+
+            // --- Event Listeners ---
+            document.addEventListener('keydown', (e) => {
+                if (isMoving || gameOverOverlay.classList.contains('active')) return;
+                 initializeAudio();
+                switch (e.key) {
+                    case 'ArrowUp': case 'w': move('up'); e.preventDefault(); break;
+                    case 'ArrowDown': case 's': move('down'); e.preventDefault(); break;
+                    case 'ArrowLeft': case 'a': move('left'); e.preventDefault(); break;
+                    case 'ArrowRight': case 'd': move('right'); e.preventDefault(); break;
+                }
+            });
+
+            let touchStartX = 0, touchStartY = 0;
+            gridContainer.addEventListener('touchstart', (e) => {
+                if (isMoving || gameOverOverlay.classList.contains('active')) return;
+                 initializeAudio();
+                touchStartX = e.touches[0].clientX; touchStartY = e.touches[0].clientY;
+                e.preventDefault();
+            }, { passive: false });
+             gridContainer.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+            gridContainer.addEventListener('touchend', (e) => {
+                if (isMoving || gameOverOverlay.classList.contains('active') || touchStartX === 0) return;
+                const touchEndX = e.changedTouches[0].clientX; const touchEndY = e.changedTouches[0].clientY;
+                const dx = touchEndX - touchStartX; const dy = touchEndY - touchStartY;
+                const absDx = Math.abs(dx); const absDy = Math.abs(dy);
+                const swipeThreshold = 30;
+                if (Math.max(absDx, absDy) > swipeThreshold) {
+                    if (absDx > absDy) move(dx > 0 ? 'right' : 'left');
+                    else move(dy > 0 ? 'down' : 'up');
+                }
+                touchStartX = 0; touchStartY = 0;
+            });
+
+            restartButton.addEventListener('click', setupGame);
+            restartButtonOverlay.addEventListener('click', setupGame);
+            timerToggleButton.addEventListener('click', toggleTimerVisibility);
+
+            // --- Initial Setup ---
+            setupGame();
+
+        });
+    </script>
+
+</body>
+</html>
